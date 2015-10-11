@@ -9,25 +9,26 @@ If you have the same users in multiple groups their SSH keys will appear only on
 To use **ldapssh** you need an LDAP server (like slapd) configured with [openssh-lpk](https://code.google.com/p/openssh-lpk/) schema. It is possible to adjust it to use different attributes from another schema for SSH keys, but that would ban you from using the defaults in the configuration file.
 
 ## Configuration file ##
-The configuration is in /etc/ldapssh.conf. The file has to be chmod 0600 because LDAP bind dn password is stored there. It also must be owned by the user specified in AuthorizedKeysCommandUser option in sshd_config.
+The configuration is in **/etc/ldapssh.conf**. The file has to be **chmod 0600** because LDAP bind dn password is stored there. It must also be owned by the user specified in **AuthorizedKeysCommandUser** option in **sshd_config**.
 The file consists of two or more sections - a mandatory **global** and one or more **filter** sections. There is no limit on the number of filter sections but each one will cost you two LDAP queries.
 
 **global** section contains LDAP bind details and cache configuration options.
   * **ldap_uri** - list of LDAP URIs.
   * **bind_dn** - bind DN for the configured LDAP URIs.
   * **bind_pw** - bind password,
-  * **ldap_timeout** - timout in seconds used for both network and select timeout in LDAP connection.
-  * **cache_ttl** - how long in seconds the cache file is considered valid. 
-  * **cache_dir** - where to store cache files. The directory has to be with perms 0700 and owned by the user specified by AuthorizedKeysCommandUser option in sshd_config.
+  * ldap_timeout - timout in seconds used for both network and select timeout in LDAP connection. Default is 2s.
+  * cache_ttl - how long in seconds the cache file is considered valid. 
+  * cache_dir - where to store cache files. Default is **/var/cache/ldapssh**. The directory has to be **chmod 0700** and owned by the user specified by **AuthorizedKeysCommandUser** option in sshd_config.
 
 All other sections are considered **filter** sections. The options are two types - **grp** and **ssh**. Most of them have working defaults and only grp_list, grp_base, ssh_base need to be set.
 
-**grp_** are for query fetching group members:
+**grp_** are for the query fetching group members:
   * **grp_list** - space separate list of group names allowed to login to this servers.
   * **grp_base** - base DN for the group LDAP search.
   * grp_dn - the attribute containing group name for use in filter. Default is 'cn'.
   * grp_attr - the attribute to be searched. Default is 'memberUid'.
   * grp_filter - LDAP filter expression template. Default is '(&(objectClass=posixGroup)%s)'.
+
 **ssh_** are for the query fetching the SSH keys:
   * **ssh_base** - base DN for the SSH pub key search.
   * ssh_dn - the attribute containing user name RDN used in memberUid entries. Default is 'uid'.
@@ -35,13 +36,13 @@ All other sections are considered **filter** sections. The options are two types
   * ssh_filter - LDAP filter expression template. Default is '(&(objectClass=posixAccount)(objectClass=ldapPublicKey)%s)'.
 
 ## Cache directory ##
-**ldapssh** writes fetched SSH keys in cache files to improve speed and reduce load on LDAP servers. The files are stored under the directory specified in **cache_dir** option and named by this pattern **<section>.<user>.cache**:
-    * section - filter configuration section from which query the keys were fetched.
+**ldapssh** writes retrieved from LDAP SSH public keys in cache files to improve speed and reduce load on LDAP servers. The files are stored under directory specified in **cache_dir** option and named by the pattern **section.user.cache**:
+    * section - filter configuration section from which the keys were fetched.
     * user - the login username given as first argument when the utility is invoked by sshd.
 
 Files are created with perms 0600.
 
-On subsequent ligins the modification time on the corresponding cache file is checked and if it's less than **cache_ttl** seconds old its contents is served instead connecting to LDAP servers.
+On subsequent ligins the modification time on the corresponding cache file is checked and if not older than **cache_ttl** seconds its contents is served instead of connecting to LDAP servers.
 
 Old cache files are not deleted automatically. A cron job may be set up to do this.
 
@@ -55,6 +56,7 @@ Several things need to be considered for secure implementation:
 Tested only on Debian and FreeBSD.
 
 Build dependencies Debian: libldap-2.4 libldap2-dev
+
 Build dependencies FreeBSD: openldap-client
 
 To install:
@@ -74,6 +76,6 @@ Debian package build files are included in the debian/ directory.
 
 ## Copyright notes ##
 A code is used from two other projects. Their license files are included.
-* [inih](https://github.com/benhoyt/inih) from Ben Hoyt
-* [uthash](https://troydhanson.github.io/uthash/) from Troy D. Hanson
+* [inih](https://github.com/benhoyt/inih) from Ben Hoyt - a simle and functional INI parsing library.
+* [uthash](https://troydhanson.github.io/uthash/) from Troy D. Hanson - hash tables for C implemented as macros.
 
