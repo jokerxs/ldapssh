@@ -1,0 +1,80 @@
+;--------------------------------------------------------------------
+; Comfiguration file for ldapssh.
+;
+; General INI style configuration:
+; ;				- comment
+; [section]		- section name
+; key = value	- set option
+; 
+; Global section contains LDAP connection details as well as cache 
+; configuration.
+;
+; Any other section is considered a filter section.
+; At least one filter section is needed. 
+; There is no upper limit on filter sections count but for each one
+; two LDAP queries are performed, so a practical limit of five seems
+; reasonable.
+;--------------------------------------------------------------------
+
+;---------------------------
+; Global section
+;---------------------------
+[global]
+; A space separated list of LDAP URIs. No default.
+ldap_uri = ldaps://ldap1.example.com/ ldaps://ldap2.example.com/
+
+; Destinguished name (DN) of the LDAP connection user. 
+bind_dn = cn=ldapuser,dc=example,dc=com
+
+; LDAP connection password.
+bind_pw = SeCrEtPaSsWoRd
+
+; Default cache TTL is 300 sec.
+cache_ttl = 300
+
+; Directory to create cache files.
+; Default is /var/cache/ldapssh
+cache_dir = /var/cache/ldapssh
+ 
+; LDAP timeout used for both the connection and select operations.
+; Default is 2 sec.
+;ldap_timeout = 2
+
+
+;---------------------------
+; Admins filter section
+;---------------------------
+[admins]
+; Space separated list of groups allowed to connect to server.
+; No default.
+grp_list = s_secure s_all
+
+; LDAP groups base dn - the OU containing groups.
+; No default.
+grp_base = ou=SGroup,dc=example,dc=com
+
+; LDAP users base dn - the OU containing user accounts with SSH pub 
+; keys set up in sshPubKey attribute.
+; No default.
+ssh_base = ou=People,dc=example,dc=com
+
+; LDAP filter template applied to group search.
+; The default is OK.
+;grp_filter = (&(objectClass=posixGroup)(cn=s_secure)%s)
+
+; LDAP filter template applied to SSH keys search.
+; The default is OK.
+;ssh_filter = (&(objectClass=posixAccount)(objectClass=ldapPublicKey)%s)
+
+
+;---------------------------
+; Servers filter section
+;---------------------------
+[servers]
+; Same as previou section but different OUs are used for other
+; servers that are allowed to passwordless connect to this one.
+grp_list = s_all
+grp_base = ou=sgroup,dc=example,dc=com
+ssh_base = ou=Hosts,dc=example,dc=com
+;grp_filter = (&(objectClass=posixGroup)(cn=s_all)%s)
+;ssh_filter = (&(objectClass=account)(objectClass=ldapPublicKey)%s)

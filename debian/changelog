@@ -1,0 +1,5 @@
+ldapssh (1.0.1-1) UNRELEASED; urgency=low
+
+  * Initial release. (Closes: #XXXXXX)
+
+ -- Jack <jack@notany.net>  Sat, 10 Oct 2015 10:09:13 +0000

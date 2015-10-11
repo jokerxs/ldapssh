@@ -1,0 +1,9 @@
+#!/bin/sh
+#
+# Set proper permissions after install.
+#
+set -e
+chmod 0755 /usr/sbin/ldapssh || exit 1
+chmod 0600 /etc/ldapssh.conf.dist || exit 1
+chmod 0700 /var/cache/ldapssh || exit 1
+exit 0

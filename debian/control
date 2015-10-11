@@ -1,0 +1,12 @@
+Source: ldapssh
+Maintainer: Jack <jack@notany.net>
+Section: misc
+Priority: optional
+Standards-Version: 3.9.2
+Build-Depends: debhelper (>= 9), libldap2-dev
+
+Package: ldapssh
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Gets SSH pubkeys list from LDAP server
+ For use with AuthorizedKeysCommand in openssh-server.
