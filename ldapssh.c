@@ -24,6 +24,7 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <regex.h>
+#include <signal.h>
 
 /* 
  * Simple INI-style config parser from
@@ -74,10 +75,13 @@ filterset *h_add_conf(filterset **h, const char *name)
 		s->grp.dn = LDAP_GRPDN_ATTR;
 		s->grp.flt = LDAP_GRP_FLT;
 		s->grp.attr = LDAP_MEMBER_ATTR;
+		s->grp.base = NULL;
+		s->grp.list = NULL;
 
 		s->ssh.dn = LDAP_USRDN_ATTR;
 		s->ssh.flt = LDAP_USR_FLT;
 		s->ssh.attr = LDAP_SSHPK_ATTR;
+		s->ssh.base = NULL;
 
 		HASH_ADD_KEYPTR( hh, *h, s->name, strlen(s->name), s );
 	}
@@ -164,9 +168,16 @@ void h_print_sshpk(FILE *f, hash_struct **h)
 {
     hash_struct *s, *tmp;
 	sshpk_struct *k;
+	int len;
 
     HASH_ITER(hh, *h, s, tmp) {
-		LL_FOREACH( s->sshpk, k ) fprintf(f, "%s", k->pk);
+		LL_FOREACH( s->sshpk, k ) {
+			len = strlen(k->pk) - 1;
+			if (k->pk[len] == '\n')
+				fprintf(f, "%s", k->pk);
+			else
+				fprintf(f, "%s\n", k->pk);
+		}
     }
 }
 
@@ -193,7 +204,7 @@ static int handler(void* user, const char* section, const char* name,
 		} else if (strcmp(name, "cache_ttl") == 0) {
 			pconfig->cache.ttl = atoi(value);
 		} else if (strcmp(name, "ldap_timeout") == 0) {
-			pconfig->ldap.timeout.tv_sec = 0.1;
+			pconfig->ldap.timeout.tv_sec = 1;
 			pconfig->ldap.timeout.tv_usec = (atoi(value) * 1000000);
 		}
 	} else {
@@ -255,7 +266,9 @@ int check_username(char* username)
     }
 
     /* check supplied username against regex */
-    if (regexec(&reg, username, 0, NULL, 0) == REG_NOMATCH)
+    r = regexec(&reg, username, 0, NULL, 0);
+	regfree(&reg);
+    if (r == REG_NOMATCH)
     {
         fprintf(stderr, "ERROR: invalid characters in username\n");
 		return 1;
@@ -378,11 +391,12 @@ int serve_cache(cacheconfig config, char *cache_file)
     }
 
 #ifdef DEBUG
-    printf("\nServed from cache: %s\n", cache_file);
+    fprintf(stderr, "\nServed from cache: %s\n", cache_file);
 #endif
 
 	free(line);
-    return fclose(f);
+	fclose(f);
+    return 0;
 }
 
 
@@ -450,7 +464,7 @@ int do_ldap_search(LDAP* ld, ldapfilter config, hash_struct **h)
 	fprintf(stderr, "config.flt=%s\n", config.flt);
 #endif
 
-	timeout.tv_sec = 0.1;
+	timeout.tv_sec = 1;
 	timeout.tv_usec = LDAP_SEARCH_TIMEOUT * 1000000;
 
     /* Make the search query */
@@ -595,8 +609,10 @@ char *get_grp_filter(ldapfilter grp)
 	s = strtok (grp.list, LIST_DELIMITERS);
 	while (s != NULL)
 	{
-		if (str_app(flt_buf, FILTER_BUF_LEN, "(%s=%s)", grp.dn, s) != 0)
+		if (str_app(flt_buf, FILTER_BUF_LEN, "(%s=%s)", grp.dn, s) != 0) {
+			free(flt_buf);
 			return NULL;
+		}
 		s = strtok (NULL, LIST_DELIMITERS);
 		i++;
 	}
@@ -607,18 +623,28 @@ char *get_grp_filter(ldapfilter grp)
 
 	/* use (|()()) filter syntax when more than one group is found */
 	if ( i > 1 ) {
-		if ( ((tmp_buf = strdup(flt_buf)) == NULL) )
+		if ( ((tmp_buf = strdup(flt_buf)) == NULL) ) {
+			free(flt_buf);
 			return NULL;
-		if (str_tpl(flt_buf, FILTER_BUF_LEN, "(|%s)", tmp_buf, "") != 0)
+		}
+		if (str_tpl(flt_buf, FILTER_BUF_LEN, "(|%s)", tmp_buf, "") != 0) {
+			free(flt_buf);
+			free(tmp_buf);
 			return NULL;
+		}
 		free(tmp_buf);
 	}
 
 	/* create final filter by using configured template */
-	if ((tmp_buf = strdup(flt_buf)) == NULL)
+	if ((tmp_buf = strdup(flt_buf)) == NULL) {
+		free(flt_buf);
 		return NULL;
-	if (str_tpl(flt_buf, FILTER_BUF_LEN, grp.flt, tmp_buf, "") != 0)
+	}
+	if (str_tpl(flt_buf, FILTER_BUF_LEN, grp.flt, tmp_buf, "") != 0) {
+		free(flt_buf);
+		free(tmp_buf);
 		return NULL;
+	}
 
 	free(tmp_buf);
 
@@ -863,6 +889,16 @@ int print_ssh_keys(LDAP **ld, configuration config, filterset *ldapgrp,
 	char *flt_buf = NULL;
 	hash_struct **h = &ldapgrp->sshkeys;
 
+	/* check for missing configuration options */
+	if ( (ldapgrp->grp.list == NULL) 
+		|| (ldapgrp->grp.base == NULL)
+		|| (ldapgrp->ssh.base == NULL) )
+	{
+		fprintf(stderr, "ERROR: Broken filter section [%s]\n", 
+				ldapgrp->name);
+		return 1;
+	}
+
     /* assemble cache file path */
 	if ( set_config_file(config.cache, ldapgrp, username) != 0)
 		return 1;
@@ -887,13 +923,14 @@ int print_ssh_keys(LDAP **ld, configuration config, filterset *ldapgrp,
     {
 		if ( serve_cache(config.cache, ldapgrp->cache_file) != 0 )
 		{
+			free(flt_buf);
 			return 1;
 		}
     } else {
+		/* write to cache file */
+		write_cache(config.cache, ldapgrp->cache_file, h);
 		/* print keys to stdout */
 		h_print_sshpk(stdout, h);
-		/* write to cache file */
-		return write_cache(config.cache, ldapgrp->cache_file, h);
 	}
 
 	free(flt_buf);
@@ -946,9 +983,13 @@ int main( int argc, char *argv[] )
 	username = argv[1];
 
 	/* set config defaults */
-	config.ldap.timeout.tv_sec = 0.1;
+	config.ldap.uri = NULL;
+	config.ldap.bind_dn = NULL;
+	config.ldap.bind_pw = NULL;
+	config.ldap.timeout.tv_sec = 1;
+	config.ldap.timeout.tv_sec = 1;
 	config.ldap.timeout.tv_usec = LDAP_NETWORK_TIMEOUT * 1000000;
-    config.cache.dir = strdup(DEFAULT_CACHE_DIR);
+	config.cache.dir = NULL;
     config.cache.file_mode = DEFAULT_CACHE_FILE_MODE;
     config.cache.ttl = DEFAULT_CACHE_TTL;
 	config.cache.owner_uid = getuid();
@@ -962,6 +1003,15 @@ int main( int argc, char *argv[] )
         fprintf(stderr, "Can't load '%s'\n", CONFIG_FILE);
         return 1;
     }
+
+	/* set default cache.dir if not configured */
+	if ( config.cache.dir == NULL )
+		config.cache.dir = strdup(DEFAULT_CACHE_DIR);
+
+	/* trap SIGPIPE as sshd stops reading stdin on first match
+	 * and closes the pipe, thus causing unclean exit of ldapssh
+	 * and discards the results */
+	signal(SIGPIPE, SIG_IGN);
 
 #ifdef DEBUG
     printf("cache_ttl: %d\n", config.cache.ttl);
@@ -984,6 +1034,14 @@ int main( int argc, char *argv[] )
 		printf("\n%s ssh_dn: %s\n", s->name, s->ssh.dn);
 	}
 #endif
+
+	if ( (config.ldap.uri == NULL) 
+		|| (config.ldap.bind_dn == NULL)
+		|| (config.ldap.bind_pw == NULL) )
+	{
+		fprintf(stderr, "ERROR: broken configuration file!\n");
+		return 1;
+	}
 
 	/* iterate over config filter sections */
     HASH_ITER(hh, config.ldapgrp, s, tmp) {
