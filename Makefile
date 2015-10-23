@@ -32,10 +32,10 @@ clean:
 	rm -f ldapssh
 
 install:
-	${INSTALL} -o ${USER} -g ${GROUP} -m 0700 ldapssh ${BIN_PREFIX}
-	${INSTALL} -o ${USER} -g ${GROUP} -m 0600 -d ${CACHEDIR}
-	${INSTALL} -o ${USER} -g ${GROUP} -m 0755 -d ${SHAREDDIR}
-	${INSTALL} -o ${USER} -g ${GROUP} -m 0600 ${CONFIGFILE} ${SHAREDDIR}
+	${INSTALL} -m 0700 ldapssh ${BIN_PREFIX}
+	${INSTALL} -m 0600 -d ${CACHEDIR}
+	${INSTALL} -m 0755 -d ${SHAREDDIR}
+	${INSTALL} -m 0600 ${CONFIGFILE} ${SHAREDDIR}
 	test -f ${CONFIGDIR}/ldapssh.conf || \
 		${CP} -p ${SHAREDDIR}/${CONFIGFILE} ${CONFIGDIR}/ldapssh.conf
 
